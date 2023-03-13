@@ -9,27 +9,53 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	jsontime "github.com/liamylian/jsontime/v2/v2"
 )
+
+var json = jsontime.ConfigWithCustomTimeFormat
+
+func init() {
+	jsontime.SetDefaultTimeFormat(time.RFC3339, time.Local)
+	jsontime.AddTimeFormatAlias("dateonly", "2006-01-02")
+	jsontime.AddTimeFormatAlias("timeonly", "15:04")
+}
 
 type receipt struct {
 	Retailer     string    `json:"retailer"`
-	PurchaseDate time.Time `json:"purchaseDate"`
-	PurchaseTime time.Time `json:"purchaseTime"`
+	PurchaseDate time.Time `json:"purchaseDate" time_format:"dateonly"`
+	PurchaseTime time.Time `json:"purchaseTime" time_format:"timeonly"`
 	Items        []Item    `json:"items"`
-	Total        float64   `json:"total"`
+	Total        float64   `json:"total,string"`
 }
 
 type Item struct {
 	ShortDescription string  `json:"shortDescription"`
-	Price            float64 `json:"price"`
+	Price            float64 `json:"price,string"`
 }
 
 var receipts = make(map[string]receipt)
 
+func main() {
+	router := gin.Default()
+	router.POST("/receipts/process", addReceipt)
+	router.GET("/receipts/:id/points", getReceiptScore)
+
+	router.Run("localhost:8080")
+}
+
 func addReceipt(c *gin.Context) {
+	rawData, err := c.GetRawData()
 	var newReceipt receipt
 
-	if err := c.BindJSON(&newReceipt); err != nil {
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+
+	err = json.Unmarshal(rawData, &newReceipt)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -37,7 +63,7 @@ func addReceipt(c *gin.Context) {
 	var receiptId string
 	for {
 		receiptId = uuid.New().String()
-		if _, ok := receipts[receiptId]; ok {
+		if _, ok := receipts[receiptId]; !ok {
 			break
 		}
 	}
@@ -47,8 +73,19 @@ func addReceipt(c *gin.Context) {
 
 func getReceiptScore(c *gin.Context) {
 	receiptId := c.Param("id")
+
+	if receiptId == "" {
+		c.IndentedJSON(http.StatusOK, gin.H{"score": 0})
+		return
+	}
+
 	score := 0
-	scoredReceipt := receipts[receiptId]
+	scoredReceipt, ok := receipts[receiptId]
+
+	if !ok {
+		c.IndentedJSON(http.StatusOK, gin.H{"score": 0})
+		return
+	}
 
 	// 1 point per alphanumeric character in retailer's name
 	score += len(alphanumericOnly(scoredReceipt.Retailer))
@@ -64,7 +101,7 @@ func getReceiptScore(c *gin.Context) {
 	}
 
 	// 5 points for every two items on the receipt.
-	score += len(scoredReceipt.Items) / 2
+	score += (len(scoredReceipt.Items) / 2) * 5
 
 	// 6 points if the day in the purchase date is odd.
 	if scoredReceipt.PurchaseDate.Day()%2 == 1 {
@@ -88,13 +125,5 @@ func getReceiptScore(c *gin.Context) {
 }
 
 func alphanumericOnly(str string) string {
-	return regexp.MustCompile(`[^a-zA-Z0-9 ]+`).ReplaceAllString(str, "")
-}
-
-func main() {
-	router := gin.Default()
-	router.POST("/receipts/process", addReceipt)
-	router.GET("/receipts/:id/points", getReceiptScore)
-
-	router.Run("localhost:8080")
+	return regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(str, "")
 }
