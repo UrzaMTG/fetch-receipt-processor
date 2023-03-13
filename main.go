@@ -75,7 +75,7 @@ func getReceiptScore(c *gin.Context) {
 	receiptId := c.Param("id")
 
 	if receiptId == "" {
-		c.IndentedJSON(http.StatusOK, gin.H{"score": 0})
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"err": "Invalid ID"})
 		return
 	}
 
@@ -83,7 +83,7 @@ func getReceiptScore(c *gin.Context) {
 	scoredReceipt, ok := receipts[receiptId]
 
 	if !ok {
-		c.IndentedJSON(http.StatusOK, gin.H{"score": 0})
+		c.IndentedJSON(http.StatusBadRequest, gin.H{"err": "Invalid ID"})
 		return
 	}
 
