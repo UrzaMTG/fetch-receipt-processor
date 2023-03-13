@@ -42,7 +42,7 @@ func addReceipt(c *gin.Context) {
 		}
 	}
 	receipts[receiptId] = newReceipt
-	c.IndentedJSON(http.StatusOK, gin.H{"id": receiptId})
+	c.JSON(http.StatusOK, gin.H{"id": receiptId})
 }
 
 func getReceiptScore(c *gin.Context) {
